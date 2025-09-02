@@ -1,0 +1,15 @@
+name = "streamer-monitor"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[triggers]
+crons = ["*/5 * * * *"]  # 每5分钟运行一次
+
+[[kv_namespaces]]
+binding = "STREAMER_MONITOR"
+id = "your-kv-namespace-id"
+preview_id = "your-preview-kv-namespace-id"
+
+[vars]
+TELEGRAM_BOT_TOKEN = "your-telegram-bot-token"
+API_BASE_URL = "https://sidekick-service-go-query-696817756223.europe-west1.run.app"

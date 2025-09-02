@@ -1,0 +1,25 @@
+{
+  "name": "streamer-monitor",
+  "version": "1.0.0",
+  "description": "直播间监控 Cloudflare Worker，支持 Telegram 通知",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "setup": "wrangler kv:namespace create STREAMER_MONITOR",
+    "setup:preview": "wrangler kv:namespace create STREAMER_MONITOR --preview"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  },
+  "keywords": [
+    "cloudflare",
+    "worker",
+    "telegram",
+    "bot",
+    "streaming",
+    "monitor"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
