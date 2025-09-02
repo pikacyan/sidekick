@@ -380,7 +380,10 @@ async function getAllMonitoredRooms(kv) {
  */
 async function checkRoomStatus(roomId, roomData, env) {
   try {
-    console.log(`检查房间 ${roomId} 的状态`);
+    // 从存储的数据中获取主播信息，用于日志显示
+    const storedStreamerName = roomData.streamerInfo?.username || "未知主播";
+
+    console.log(`检查房间 ${storedStreamerName} (${roomId}) 的状态`);
 
     // 调用 API 获取房间信息
     const response = await fetch(
@@ -389,7 +392,7 @@ async function checkRoomStatus(roomId, roomData, env) {
     const data = await response.json();
 
     if (data.code !== 0) {
-      console.error(`获取房间 ${roomId} 信息失败:`, data.msg);
+      console.error(`获取房间 ${storedStreamerName} (${roomId}) 信息失败:`, data.msg);
       return;
     }
 
@@ -404,6 +407,8 @@ async function checkRoomStatus(roomId, roomData, env) {
 
     // 如果状态发生变化，发送通知
     if (isLive !== previousStatus) {
+      console.log(`房间 ${streamerInfo.username} (${roomId}) 状态发生变化，发送通知给 ${roomData.subscribers.length} 个订阅者`);
+
       await sendNotifications(
         roomId,
         streamerInfo,
@@ -415,10 +420,15 @@ async function checkRoomStatus(roomId, roomData, env) {
       // 更新存储的状态
       roomData.isLive = isLive;
       roomData.lastChecked = new Date().toISOString();
+      roomData.streamerInfo = streamerInfo; // 更新主播信息
       await env.STREAMER_MONITOR.put(roomId, JSON.stringify(roomData));
+
+      console.log(`房间 ${streamerInfo.username} (${roomId}) 状态更新完成`);
+    } else {
+      console.log(`房间 ${streamerInfo.username} (${roomId}) 状态无变化`);
     }
   } catch (error) {
-    console.error(`检查房间 ${roomId} 状态时出错:`, error);
+    console.error(`检查房间 ${roomData.streamerInfo?.username || "未知主播"} (${roomId}) 状态时出错:`, error);
   }
 }
 
@@ -433,6 +443,8 @@ async function sendNotifications(
   env
 ) {
   const message = createNotificationMessage(streamerInfo, isLive);
+
+  console.log(`开始向 ${subscribers.length} 个订阅者发送 ${streamerInfo.username} (${roomId}) 的通知`);
 
   for (const chatId of subscribers) {
     try {
@@ -451,12 +463,12 @@ async function sendNotifications(
       });
 
       if (!response.ok) {
-        console.error(`发送通知到 ${chatId} 失败:`, await response.text());
+        console.error(`发送 ${streamerInfo.username} (${roomId}) 通知到 ${chatId} 失败:`, await response.text());
       } else {
-        console.log(`成功发送通知到 ${chatId}`);
+        console.log(`成功发送 ${streamerInfo.username} (${roomId}) 通知到 ${chatId}`);
       }
     } catch (error) {
-      console.error(`发送通知到 ${chatId} 时出错:`, error);
+      console.error(`发送 ${streamerInfo.username} (${roomId}) 通知到 ${chatId} 时出错:`, error);
     }
   }
 }
@@ -504,12 +516,15 @@ async function addRoomMonitor(request, env) {
   } else {
     // 新房间，先获取初始状态
     try {
+      console.log(`API添加监控：获取房间 ${roomId} 信息`);
+
       const response = await fetch(
         `${env.API_BASE_URL}/query/api/get_streamer_info?uid=${roomId}`
       );
       const data = await response.json();
 
       if (data.code !== 0) {
+        console.error(`API添加监控：获取房间 ${roomId} 信息失败:`, data.msg);
         return new Response(
           JSON.stringify({ error: "房间不存在或获取信息失败" }),
           {
@@ -525,7 +540,10 @@ async function addRoomMonitor(request, env) {
         lastChecked: new Date().toISOString(),
         streamerInfo: data.data,
       };
+
+      console.log(`API添加监控：成功获取房间 ${data.data.username} (${roomId}) 信息`);
     } catch (error) {
+      console.error(`API添加监控：获取房间 ${roomId} 信息时出错:`, error);
       return new Response(JSON.stringify({ error: "获取房间信息失败" }), {
         status: 500,
         headers: { "Content-Type": "application/json" },
@@ -540,6 +558,8 @@ async function addRoomMonitor(request, env) {
 
   // 保存数据
   await env.STREAMER_MONITOR.put(roomId, JSON.stringify(roomData));
+
+  console.log(`API添加监控：成功为用户 ${chatId} 添加房间 ${roomData.streamerInfo?.username || "未知主播"} (${roomId}) 监控`);
 
   return new Response(
     JSON.stringify({
@@ -568,6 +588,7 @@ async function removeRoomMonitor(request, env) {
 
   const roomData = await env.STREAMER_MONITOR.get(roomId);
   if (!roomData) {
+    console.log(`API移除监控：房间 ${roomId} 未在监控中`);
     return new Response(JSON.stringify({ error: "房间未在监控中" }), {
       status: 404,
       headers: { "Content-Type": "application/json" },
@@ -575,15 +596,21 @@ async function removeRoomMonitor(request, env) {
   }
 
   const data = JSON.parse(roomData);
+  const streamerName = data.streamerInfo?.username || "未知主播";
+
   data.subscribers = data.subscribers.filter((id) => id !== chatId);
 
   if (data.subscribers.length === 0) {
     // 没有订阅者了，删除整个记录
     await env.STREAMER_MONITOR.delete(roomId);
+    console.log(`API移除监控：房间 ${streamerName} (${roomId}) 无订阅者，删除监控记录`);
   } else {
     // 还有订阅者，更新数据
     await env.STREAMER_MONITOR.put(roomId, JSON.stringify(data));
+    console.log(`API移除监控：房间 ${streamerName} (${roomId}) 还有 ${data.subscribers.length} 个订阅者，更新记录`);
   }
+
+  console.log(`API移除监控：成功为用户 ${chatId} 移除房间 ${streamerName} (${roomId}) 监控`);
 
   return new Response(
     JSON.stringify({ success: true, message: "成功移除监控" }),
@@ -617,6 +644,8 @@ async function listMonitoredRooms(request, env) {
       streamerInfo: data.streamerInfo,
     }));
 
+  console.log(`API列出监控：用户 ${chatId} 监控了 ${userRooms.length} 个房间`);
+
   return new Response(JSON.stringify({ rooms: userRooms }), {
     headers: { "Content-Type": "application/json" },
   });
@@ -637,15 +666,24 @@ async function checkStatus(request, env) {
   }
 
   try {
+    console.log(`API检查状态：手动检查房间 ${roomId} 状态`);
+
     const response = await fetch(
       `${env.API_BASE_URL}/query/api/get_streamer_info?uid=${roomId}`
     );
     const data = await response.json();
 
+    if (data.code === 0) {
+      console.log(`API检查状态：成功获取房间 ${data.data.username} (${roomId}) 状态`);
+    } else {
+      console.error(`API检查状态：获取房间 ${roomId} 状态失败:`, data.msg);
+    }
+
     return new Response(JSON.stringify(data), {
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
+    console.error(`API检查状态：检查房间 ${roomId} 状态时出错:`, error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
