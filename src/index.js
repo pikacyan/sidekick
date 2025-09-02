@@ -108,6 +108,7 @@ async function handleTelegramMessage(message, env) {
 
   switch (command) {
     case "/start":
+    case "/help":
       await sendWelcomeMessage(chatId, env);
       break;
     case "/list":
@@ -205,6 +206,7 @@ async function handleListCommand(chatId, env) {
       message += `📺 ${room.streamerInfo?.username || "未知主播"}\n`;
       message += `   状态：${status}\n`;
       message += `   房间ID：<code>${room.roomId}</code>\n`;
+      message += `   直播间链接：https://sidekick.fans/${room.roomId}\n`;
       message += `   最后检查：${lastChecked}\n\n`;
     }
 
@@ -232,6 +234,7 @@ async function sendWelcomeMessage(chatId, env) {
 • 发送 Sidekick 链接 → 添加监控
 • 再次发送相同链接 → 取消监控
 • 发送 /list → 查看监控列表
+• 发送 /help → 显示帮助
 
 💡 示例：
 https://sidekick.fans/cmahm5oy0001fl40m59hgr47g
@@ -252,7 +255,7 @@ async function sendUnknownCommand(chatId, env) {
 📋 可用操作：
 • 发送 Sidekick 链接 → 添加/取消监控
 • /list → 查看监控列表
-• /start → 显示帮助
+• /start 或 /help → 显示帮助
 
 💡 示例：
 https://sidekick.fans/cmahm5oy0001fl40m59hgr47g
@@ -277,6 +280,7 @@ async function sendTelegramMessage(chatId, text, env) {
           chat_id: chatId,
           text: text,
           parse_mode: "HTML",
+          disable_web_page_preview: true,
         }),
       }
     );
@@ -394,7 +398,7 @@ async function checkRoomStatus(roomId, roomData, env) {
     const previousStatus = roomData.isLive;
 
     console.log(
-      `房间 ${roomId} 当前状态: ${isLive ? "直播中" : "未开播"}, 之前状态: ${previousStatus ? "直播中" : "未开播"
+      `房间 ${streamerInfo.username} (${roomId}) 当前状态: ${isLive ? "直播中" : "未开播"}, 之前状态: ${previousStatus ? "直播中" : "未开播"
       }`
     );
 
@@ -442,6 +446,7 @@ async function sendNotifications(
           chat_id: chatId,
           text: message,
           parse_mode: "HTML",
+          disable_web_page_preview: true,
         }),
       });
 
@@ -463,6 +468,7 @@ function createNotificationMessage(streamerInfo, isLive) {
   const status = isLive ? "🟢 开播了！" : "🔴 下播了";
   const viewerCount = streamerInfo.viewer || 0;
   const followers = streamerInfo.followers || 0;
+  const roomUrl = `https://sidekick.fans/${streamerInfo.uid}`;
 
   return `
 <b>${streamerInfo.username}</b> ${status}
@@ -474,6 +480,7 @@ function createNotificationMessage(streamerInfo, isLive) {
 🔗 Twitter: ${streamerInfo.twitter || "无"}
 
 房间ID: <code>${streamerInfo.uid}</code>
+🔗 直播间链接: ${roomUrl}
   `.trim();
 }
 
