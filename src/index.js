@@ -95,7 +95,7 @@ async function handleTelegramMessage(message, env) {
 
   // 检查是否是 Sidekick 链接
   const sidekickUrlMatch = text.match(
-    /https?:\/\/sidekick\.fans\/([a-zA-Z0-9]+)/
+    /https?:\/\/sidekick\.fans\/(?:channel\/)?([a-zA-Z0-9]+)/
   );
   if (sidekickUrlMatch) {
     const roomId = sidekickUrlMatch[1];
