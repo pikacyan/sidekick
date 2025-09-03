@@ -206,7 +206,7 @@ async function handleListCommand(chatId, env) {
       message += `📺 ${room.streamerInfo?.username || "未知主播"}\n`;
       message += `   状态：${status}\n`;
       message += `   房间ID：<code>${room.roomId}</code>\n`;
-      message += `   直播间链接：https://sidekick.fans/${room.roomId}\n`;
+      message += `   链接：<code>https://sidekick.fans/${room.roomId}</code>\n`;
       message += `   最后检查：${lastChecked}\n\n`;
     }
 
