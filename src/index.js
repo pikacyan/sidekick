@@ -197,20 +197,17 @@ async function handleListCommand(chatId, env) {
       return;
     }
 
-    let message = "📋 你当前监控的直播间：\n\n";
+    let message = "📋 监控列表：\n\n";
 
     for (const room of userRooms) {
-      const status = room.isLive ? "🟢 直播中" : "🔴 未开播";
-      const lastChecked = new Date(room.lastChecked).toLocaleString("zh-CN");
+      const status = room.isLive ? "🟢" : "🔴";
+      const username = room.streamerInfo?.username || "未知主播";
 
-      message += `📺 ${room.streamerInfo?.username || "未知主播"}\n`;
-      message += `   状态：${status}\n`;
-      message += `   房间ID：<code>${room.roomId}</code>\n`;
-      message += `   链接：<code>https://sidekick.fans/${room.roomId}</code>\n`;
-      message += `   最后检查：${lastChecked}\n\n`;
+      message += `${status} ${username}\n`;
+      message += `   <code>https://sidekick.fans/${room.roomId}</code>\n\n`;
     }
 
-    message += "💡 再次发送相同链接可取消监控";
+    message += "💡 发送链接可取消监控";
 
     await sendTelegramMessage(chatId, message, env);
   } catch (error) {
@@ -470,18 +467,12 @@ function createNotificationMessage(streamerInfo, isLive) {
   const followers = streamerInfo.followers || 0;
   const roomUrl = `https://sidekick.fans/${streamerInfo.uid}`;
 
-  return `
-<b>${streamerInfo.username}</b> ${status}
+  // 简化版本 - 只显示关键信息
+  return `<b>${streamerInfo.username}</b> ${status}
 
-📺 直播间标题: ${streamerInfo.title}
-👥 当前观众: ${viewerCount.toLocaleString()}
-👤 粉丝数: ${followers.toLocaleString()}
-🏷️ 标签: ${streamerInfo.tags?.join(", ") || "无"}
-🔗 Twitter: ${streamerInfo.twitter || "无"}
-
-房间ID: <code>${streamerInfo.uid}</code>
-🔗 直播间链接: ${roomUrl}
-  `.trim();
+📺 ${streamerInfo.title}
+👥 ${viewerCount.toLocaleString()} 👤 ${followers.toLocaleString()}
+🔗 ${roomUrl}`;
 }
 
 /**
