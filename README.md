@@ -1,229 +1,80 @@
-# Sidekick 监控机器人部署教程
+# Sidekick 监控机器人 (Sidekick Monitor Bot)
 
-## 📋 项目简介
+这是一个基于 Cloudflare Workers 的 Sidekick 直播间监控机器人。它能够定时检查指定直播间的状态，并通过 Telegram 机器人第一时间通知你主播开播或下播的消息。
 
-这是一个基于 Cloudflare Workers 的 Sidekick 直播监控机器人，具有以下功能：
+## ✨ 功能特性
 
-- 🔍 自动监控 Sidekick 主播的直播状态
-- 📱 通过 Telegram 机器人发送开播/下播通知
-- ⏰ 定时检查（每2分钟）
-- 🎯 支持多用户订阅同一主播
-- 🔗 通过发送 Sidekick 链接即可添加/取消监控
+*   **自动监控**：利用 Cloudflare Workers 的 Cron Triggers 定时检查直播间状态。
+*   **即时通知**：通过 Telegram 发送开播/下播通知，包含观众人数、粉丝数等信息。
+*   **简单交互**：直接向机器人发送 Sidekick 直播间链接即可添加或取消监控。
+*   **多用户支持**：支持多个用户分别监控不同的直播间。
+*   **无服务器架构**：完全运行在 Cloudflare Edge 上，无需维护服务器。
 
-## 🛠️ 部署前准备
+## 🛠️ 程序功能分析
 
-### 1. 安装必要工具
+该项目是一个 Cloudflare Worker 应用，核心逻辑位于 `src/index.js`。
 
-#### 安装 Node.js
-```bash
-# 下载并安装 Node.js (推荐 v18+)
-# 访问 https://nodejs.org/ 下载安装包
-```
+1.  **定时任务 (Cron)**: 配置为每 2 分钟运行一次 (`*/2 * * * *`)。它会遍历 KV 存储中所有被监控的房间，调用 Sidekick API 检查状态。如果状态发生变化（开播/下播），则触发通知。
+2.  **KV 存储**: 使用 `STREAMER_MONITOR` 命名空间存储房间信息、当前直播状态 (`isLive`) 以及订阅该房间的用户列表 (`subscribers`)。
+3.  **Telegram Webhook**: 处理用户发送的消息。
+    *   **链接识别**: 自动识别 `sidekick.fans` 链接，实现一键订阅/退订。
+    *   **指令响应**: 支持 `/list` 查看监控列表，`/start` 和 `/help` 查看帮助。
+4.  **API 交互**: 封装了与 Sidekick 官方 API 的通信，获取主播实时信息。
 
-#### 安装 Wrangler CLI
-```bash
-npm install -g wrangler
-```
+*(注：未在项目中找到 Dockerfile，以上分析基于源代码 `src/index.js` 和配置文件 `wrangler.toml`)*
 
-### 2. 创建 Telegram 机器人
+## 🚀 部署教程
 
-1. 在 Telegram 中找到 [@BotFather](https://t.me/botfather)
-2. 发送 `/newbot` 命令
-3. 按提示设置机器人名称和用户名
-4. 保存获得的 Bot Token（格式：`123456789:ABCdefGHIjklMNOpqrsTUVwxyz`）
+### 准备工作
+1.  拥有一个 Cloudflare 账户。
+2.  申请一个 Telegram Bot Token (通过 [@BotFather](https://t.me/BotFather))。
+3.  安装 [Node.js](https://nodejs.org/) 和 `wrangler` CLI。
 
-### 3. 登录 Cloudflare
-
-```bash
-wrangler login
-```
-
-## 🚀 部署步骤
-
-### 步骤 1: 克隆项目
+### 步骤 1: 配置 Cloudflare KV
+在终端中运行以下命令创建 KV 命名空间：
 
 ```bash
-git clone <your-repository-url>
-cd sidekick
+npx wrangler kv:namespace create "STREAMER_MONITOR"
 ```
 
-### 步骤 2: 创建 KV 命名空间
+将输出的 `id` 复制到 `wrangler.toml` 文件中的 `id` 字段。
 
-```bash
-# 创建生产环境 KV 命名空间
-wrangler kv:namespace create "STREAMER_MONITOR"
-
-# 创建预览环境 KV 命名空间
-wrangler kv:namespace create "STREAMER_MONITOR" --preview
-```
-
-### 步骤 3: 配置环境变量
-
-编辑 `wrangler.toml` 文件，更新以下配置：
+### 步骤 2: 修改配置文件
+编辑 `wrangler.toml` 文件：
 
 ```toml
-name = "streamer-monitor"
-main = "src/index.js"
-compatibility_date = "2024-01-01"
-
-[triggers]
-crons = ["*/2 * * * *"]  # 每2分钟运行一次
+# wrangler.toml
 
 [[kv_namespaces]]
 binding = "STREAMER_MONITOR"
-id = "你的生产环境KV命名空间ID"  # 替换为步骤2中获得的ID
-preview_id = "你的预览环境KV命名空间ID"  # 替换为步骤2中获得的ID
+id = "替换为你刚才创建的 KV ID" 
+preview_id = "替换为你的 preview KV ID (可选)"
 
 [vars]
-TELEGRAM_BOT_TOKEN = "你的Telegram机器人Token"  # 替换为你的Bot Token
+TELEGRAM_BOT_TOKEN = "替换为你的 Telegram Bot Token"
+# API 地址通常无需修改，除非 Sidekick 接口变更
 API_BASE_URL = "https://sidekick-service-go-query-696817756223.europe-west1.run.app"
 ```
 
-### 步骤 4: 部署到 Cloudflare Workers
+### 步骤 3: 部署
+运行以下命令将 Worker 部署到 Cloudflare：
 
 ```bash
-# 部署到生产环境
-wrangler deploy
-
-# 或者先部署到预览环境测试
-wrangler deploy --env preview
+npx wrangler deploy
 ```
 
-### 步骤 5: 设置 Telegram Webhook
-
-部署成功后，设置 Telegram Webhook：
+### 步骤 4: 设置 Telegram Webhook
+部署成功后，你会获得一个 Worker URL (例如 `https://streamer-monitor.your-name.workers.dev`)。
+你需要将 Telegram Bot 的 Webhook 设置为这个地址：
 
 ```bash
-# 替换为你的实际域名和Bot Token
-curl -X POST "https://api.telegram.org/bot你的BOT_TOKEN/setWebhook" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://你的worker域名.workers.dev/webhook"
-  }'
+curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=https://<YOUR_WORKER_URL>/webhook"
 ```
+*(将 `<YOUR_BOT_TOKEN>` 和 `<YOUR_WORKER_URL>` 替换为实际值)*
 
-## 🔧 配置说明
+## 📱 使用说明
 
-### 环境变量
-
-| 变量名 | 说明 | 示例 |
-|--------|------|------|
-| `TELEGRAM_BOT_TOKEN` | Telegram 机器人 Token | `123456789:ABCdefGHIjklMNOpqrsTUVwxyz` |
-| `API_BASE_URL` | Sidekick API 基础地址 | `https://sidekick-service-go-query-696817756223.europe-west1.run.app` |
-
-### KV 存储结构
-
-```json
-{
-  "房间ID": {
-    "isLive": true,
-    "subscribers": ["用户ID1", "用户ID2"],
-    "lastChecked": "2024-01-01T00:00:00.000Z",
-    "streamerInfo": {
-      "uid": "房间ID",
-      "username": "主播用户名",
-      "title": "直播标题",
-      "live_status": true,
-      "viewer": 1000,
-      "followers": 50000,
-      "tags": ["标签1", "标签2"],
-      "twitter": "twitter用户名"
-    }
-  }
-}
-```
-
-## 📱 使用方法
-
-### 用户操作指南
-
-1. **添加监控**：向机器人发送 Sidekick 链接
-   ```
-   https://sidekick.fans/cmahm5oy0001fl40m59hgr47g
-   ```
-
-2. **查看监控列表**：发送 `/list` 命令
-
-3. **取消监控**：再次发送相同的 Sidekick 链接
-
-4. **获取帮助**：发送 `/start` 或 `/help` 命令
-
-### API 接口
-
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| `/api/monitor/add` | POST | 添加房间监控 |
-| `/api/monitor/remove` | POST | 移除房间监控 |
-| `/api/monitor/list` | GET | 获取监控列表 |
-| `/api/check-status` | GET | 检查房间状态 |
-| `/webhook` | POST | Telegram Webhook |
-
-## 🔍 监控和调试
-
-### 查看日志
-
-```bash
-# 查看实时日志
-wrangler tail
-
-# 查看特定环境的日志
-wrangler tail --env preview
-```
-
-### 测试功能
-
-```bash
-# 测试 API 接口
-curl -X POST "https://你的worker域名.workers.dev/api/monitor/add" \
-  -H "Content-Type: application/json" \
-  -d '{"roomId": "测试房间ID", "chatId": "测试用户ID"}'
-```
-
-## 🛡️ 安全注意事项
-
-1. **保护 Bot Token**：不要将 Token 提交到公开仓库
-2. **限制访问**：可以添加用户白名单机制
-3. **监控使用量**：注意 Cloudflare Workers 的使用限制
-
-## 🔄 更新部署
-
-```bash
-# 修改代码后重新部署
-wrangler deploy
-
-# 如果需要回滚
-wrangler rollback
-```
-
-## 📊 性能优化
-
-1. **批量操作**：减少 KV 存储的读写次数
-2. **缓存策略**：合理使用缓存减少 API 调用
-3. **错误处理**：完善错误处理机制
-
-## 🆘 常见问题
-
-### Q: 机器人没有响应
-A: 检查 Webhook 是否正确设置，查看 Worker 日志
-
-### Q: 监控通知延迟
-A: 检查 cron 触发器配置，确保每2分钟执行一次
-
-### Q: KV 存储错误
-A: 确认 KV 命名空间 ID 配置正确，检查权限设置
-
-### Q: API 调用失败
-A: 检查 `API_BASE_URL` 配置，确认网络连接正常
-
-## 📞 技术支持
-
-如果遇到问题，请检查：
-
-1. Cloudflare Workers 控制台日志
-2. Telegram Bot API 响应
-3. KV 存储数据状态
-4. 网络连接和防火墙设置
-
----
-
-**部署完成后，您的 Sidekick 监控机器人就可以正常工作了！** 🎉
+1.  打开你的 Telegram 机器人对话框。
+2.  **添加监控**：发送 Sidekick 直播间链接，例如：`https://sidekick.fans/u123456`。
+3.  **取消监控**：再次发送相同的链接即可取消。
+4.  **查看列表**：发送 `/list` 命令查看当前正在监控的所有直播间。
